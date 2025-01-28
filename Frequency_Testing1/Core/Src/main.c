@@ -156,6 +156,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   * @brief  The application entry point.
   * @retval int
   */
+
 int main(void)
 {
   /* USER CODE BEGIN 1 */

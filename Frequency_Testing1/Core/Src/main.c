@@ -62,64 +62,91 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 #define TIMCLOCK   16000000
-#define PRESCALAR  15
+#define PRESCALER  15
 
 uint32_t IC_Val1 = 0;
 uint32_t IC_Val2 = 0;
 uint32_t Difference = 0;
 int Is_First_Captured = 0;
 float frequency = 0;
-float phase_angle = 0;
 
 void Print_Frequency(void) {
     char buffer[50]; // Buffer to hold the string
-    int len = sprintf(buffer, "Frequency: %.2f Hz\r\n", frequency); // Format the string
-    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, HAL_MAX_DELAY); // Send the string over UART
+    int len = sprintf(buffer, "Frequency: %.2f Hz\r\n", frequency); // Format  string
+    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, HAL_MAX_DELAY); // Send string over UART
 }
 
-void Print_Phase_Angle(void) {
-    char buffer[50]; // Buffer to hold the string
-    int len = sprintf(buffer, "Phase Angle: %.2f Degrees\r\n", phase_angle); // Format the string
-    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, HAL_MAX_DELAY); // Send the string over UART
+float Calculate_Resistance(float frequency, float capacitance) {
+    return ((1.44 / (frequency * capacitance) - 1000)) / 2;
 }
 
-/* Measure Frequency */
+float Calculate_Capacitance(float frequency, float resistance) {
+    return (1.44 / frequency) / (12000);
+}
 
+void Print_Resistance(float resistance) {
+    char buffer[50];
+    int len = sprintf(buffer, "Resistance: %.2f Ohms\r\n", resistance);
+    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, HAL_MAX_DELAY);
+}
+
+void Print_Capacitance(float capacitance) {
+    char buffer[50];
+    int len = sprintf(buffer, "Capacitance: %.2f Farads\r\n", capacitance);
+    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, HAL_MAX_DELAY);
+}
+
+// Measure Frequency
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
 	{
-		if (Is_First_Captured==0) // if the first rising edge is not captured
+		// If the first rising edge is not captured
+		if (Is_First_Captured==0)
 		{
 			IC_Val1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1); // read the first value
 			Is_First_Captured = 1;  // set the first captured as true
 		}
 
-		else   // If the first rising edge is captured, now we will capture the second edge
+		else   // If the first rising edge is captured, the second edge will be captured
 		{
-			IC_Val2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);  // read second value
+			// Read second value
+			IC_Val2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
 
 			if (IC_Val2 > IC_Val1)
 			{
+				// Calculate time difference between clock edges
 				Difference = IC_Val2-IC_Val1;
 			}
 
 			else if (IC_Val1 > IC_Val2)
 			{
+				// Calculate the time difference when timer has overflowed
 				Difference = (0xffffffff - IC_Val1) + IC_Val2;
 			}
 
-			float refClock = TIMCLOCK/(PRESCALAR);
+			float refClock = TIMCLOCK/(PRESCALER);
 
 			frequency = refClock/Difference;
 
-			phase_angle = ((IC_Val2-IC_Val1) / (1e6 / frequency)) * 360;
+			// Reset the counter
+			__HAL_TIM_SET_COUNTER(htim, 0);
 
-			__HAL_TIM_SET_COUNTER(htim, 0);  // reset the counter
-			Is_First_Captured = 0; // set it back to false
+			// Set Is_First_Captured back to false
+			Is_First_Captured = 0;
+
 			Print_Frequency();
-			Print_Phase_Angle();
+
+			// Value of known capacitor in circuit in Farads
+			float capacitance = 1e-6;
+			float resistance = Calculate_Resistance(frequency, capacitance);
+			Print_Resistance(resistance);
+
+			// Value of known resistor in circuit in Ohms
+			float resistance_known = 1000;
+			float capacitance_calculated = Calculate_Capacitance(frequency, resistance_known);
+			Print_Capacitance(capacitance_calculated);
 		}
 	}
 }
